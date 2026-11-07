@@ -806,7 +806,7 @@ void lqn(std::complex<T> z, OutputVec1 cqn, OutputVec2 cqd) {
 
     std::complex<T> cq0, cq1, cqf0 = 0.0, cqf1, cqf2;
 
-    if (real(z) == 1) {
+    if (abs(real(z)) == 1 && imag(z) == 0) {
         for (int k = 0; k <= n; ++k) {
             cqn(k) = 1e300;
             cqd(k) = 1e300;
@@ -835,16 +835,35 @@ void lqn(std::complex<T> z, OutputVec1 cqn, OutputVec2 cqd) {
         if (abs(z) > 1.1) {
             km = 40 + n;
         } else {
-            km = (int)((40 + n) * floor(-1.0 - 1.8 * log(abs(z - static_cast<T>(1)))));
+            km = (int)((40 + n) * floor(-1.0 - 1.8 * log(abs(z) - static_cast<T>(1))));
         }
 
         cqf2 = 0.0;
         cqf1 = 1.0;
+
+        // The backward recurrence grows rapidly and can overflow for large km.
+        // Rescale the recurrence state together with the values already stored
+        // in cqn; the common factor cancels in the normalization by cq0 / cqf0.
+        const T threshold = std::sqrt(std::numeric_limits<T>::max()) / static_cast<T>(10);
+        const T scale = static_cast<T>(1) / threshold;
+
         for (int k = km; k >= 0; k--) {
             cqf0 = (static_cast<T>(2 * k + 3) * z * cqf1 - static_cast<T>(k + 2) * cqf2) / static_cast<T>(k + 1);
+
+            if (std::abs(cqf0) > threshold) {
+                cqf0 *= scale;
+                cqf1 *= scale;
+                cqf2 *= scale;
+
+                for (int j = k + 1; j <= n; ++j) {
+                    cqn(j) *= scale;
+                }
+            }
+
             if (k <= n) {
                 cqn[k] = cqf0;
             }
+
             cqf2 = cqf1;
             cqf1 = cqf0;
         }
